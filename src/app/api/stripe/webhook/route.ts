@@ -4,6 +4,9 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { sendPaymentFailed } from '@/lib/resend';
 import type Stripe from 'stripe';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db = () => createAdminClient() as any;
+
 export async function POST(request: Request) {
   const body = await request.text();
   const sig = request.headers.get('stripe-signature');
@@ -14,8 +17,8 @@ export async function POST(request: Request) {
 
   let event: Stripe.Event;
   try {
-    // If no webhook secret configured, skip signature verification (dev only)
-    if (!process.env.STRIPE_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET === 'whsec_REPLACE_AFTER_CREATING_WEBHOOK') {
+    const secret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!secret || secret === 'whsec_skip' || secret === 'whsec_REPLACE_AFTER_CREATING_WEBHOOK') {
       event = JSON.parse(body) as Stripe.Event;
     } else {
       event = constructWebhookEvent(body, sig);
@@ -25,21 +28,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
-  const supabase = createAdminClient();
-
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.metadata?.userId;
-      const subscription = session.subscription as string;
+      const subscriptionId = session.subscription as string;
 
-      if (userId && subscription) {
-        const stripe = (await import('@/lib/stripe')).stripe;
-        const sub = await stripe.subscriptions.retrieve(subscription);
-        await supabase.from('billing_status').upsert({
+      if (userId && subscriptionId) {
+        const { stripe } = await import('@/lib/stripe');
+        const sub = await stripe.subscriptions.retrieve(subscriptionId) as unknown as {
+          status: string;
+          trial_end: number | null;
+          current_period_end: number;
+        };
+        await db().from('billing_status').upsert({
           user_id: userId,
           stripe_customer_id: session.customer as string,
-          stripe_subscription_id: subscription,
+          stripe_subscription_id: subscriptionId,
           status: sub.status,
           trial_ends_at: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
           current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
@@ -49,11 +54,12 @@ export async function POST(request: Request) {
     }
 
     case 'customer.subscription.updated': {
-      const sub = event.data.object as Stripe.Subscription;
-      const customerId = sub.customer as string;
-
-      await supabase
-        .from('billing_status')
+      const sub = event.data.object as Stripe.Subscription & {
+        current_period_end: number;
+        trial_end: number | null;
+        cancel_at_period_end: boolean;
+      };
+      await db().from('billing_status')
         .update({
           stripe_subscription_id: sub.id,
           status: sub.status,
@@ -62,14 +68,13 @@ export async function POST(request: Request) {
           cancel_at_period_end: sub.cancel_at_period_end,
           updated_at: new Date().toISOString(),
         })
-        .eq('stripe_customer_id', customerId);
+        .eq('stripe_customer_id', sub.customer as string);
       break;
     }
 
     case 'customer.subscription.deleted': {
       const sub = event.data.object as Stripe.Subscription;
-      await supabase
-        .from('billing_status')
+      await db().from('billing_status')
         .update({ status: 'canceled', updated_at: new Date().toISOString() })
         .eq('stripe_customer_id', sub.customer as string);
       break;
@@ -77,21 +82,19 @@ export async function POST(request: Request) {
 
     case 'invoice.payment_failed': {
       const invoice = event.data.object as Stripe.Invoice;
-      await supabase
-        .from('billing_status')
-        .update({ status: 'past_due', updated_at: new Date().toISOString() })
-        .eq('stripe_customer_id', invoice.customer as string);
+      const customerId = invoice.customer as string;
 
-      // Get user email and send notification
-      const { data: billing } = await supabase
-        .from('billing_status')
+      await db().from('billing_status')
+        .update({ status: 'past_due', updated_at: new Date().toISOString() })
+        .eq('stripe_customer_id', customerId);
+
+      const { data: billing } = await db().from('billing_status')
         .select('user_id')
-        .eq('stripe_customer_id', invoice.customer as string)
+        .eq('stripe_customer_id', customerId)
         .single();
 
-      if (billing) {
-        const { data: profile } = await supabase
-          .from('profiles')
+      if (billing?.user_id) {
+        const { data: profile } = await db().from('profiles')
           .select('email')
           .eq('id', billing.user_id)
           .single();

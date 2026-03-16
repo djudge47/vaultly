@@ -9,11 +9,12 @@ export async function POST() {
 
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { data: billing } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: billing } = await (supabase as any)
       .from('billing_status')
       .select('stripe_customer_id')
       .eq('user_id', user.id)
-      .single();
+      .single() as { data: { stripe_customer_id: string } | null };
 
     if (!billing?.stripe_customer_id) {
       return NextResponse.json({ error: 'No billing record found' }, { status: 404 });

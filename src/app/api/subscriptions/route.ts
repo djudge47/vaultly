@@ -56,11 +56,18 @@ export async function POST() {
     const adminSupabase = createAdminClient();
 
     // Get all transactions for this user
-    const { data: transactions } = await adminSupabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: transactions } = await (adminSupabase as any)
       .from('transactions')
       .select('*')
       .eq('user_id', user.id)
-      .order('date', { ascending: false });
+      .order('date', { ascending: false }) as {
+        data: Array<{
+          merchant_name: string | null;
+          amount: number;
+          date: string;
+        }> | null
+      };
 
     if (!transactions?.length) {
       return NextResponse.json({ detected: 0 });
@@ -116,7 +123,8 @@ export async function POST() {
       const confidence = Math.min(0.5 + txs.length * 0.1, 0.99);
 
       // Upsert subscription
-      const { error } = await adminSupabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (adminSupabase as any)
         .from('subscriptions')
         .upsert(
           {

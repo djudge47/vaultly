@@ -20,6 +20,7 @@ export default function OnboardingPage() {
   const [analysisComplete, setAnalysisComplete] = useState(false);
   const [leakScore, setLeakScore] = useState<number | null>(null);
   const [demoMode] = useState(process.env.NEXT_PUBLIC_DEMO_MODE === 'true' || true);
+  const [loading, setLoading] = useState(false);
 
   async function handleConnectBank() {
     if (demoMode) {
@@ -61,14 +62,19 @@ export default function OnboardingPage() {
   }
 
   async function handleDemoData() {
-    // In demo mode, trigger seed data load via sync + detect
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    setBankConnected(true);
-    setInstitutionName('Demo Bank (15 subscriptions loaded)');
-    toast.success('Demo data loaded! 15 subscriptions ready.');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/demo', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to load demo data');
+      setBankConnected(true);
+      setInstitutionName(`Demo Bank (${data.inserted} subscriptions loaded)`);
+      toast.success(`${data.inserted} demo subscriptions loaded!`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load demo data');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function runAnalysis() {
@@ -98,7 +104,8 @@ export default function OnboardingPage() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', user.id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('profiles').update({ onboarding_completed: true }).eq('id', user.id);
       }
 
       setAnalysisComplete(true);
@@ -209,8 +216,8 @@ export default function OnboardingPage() {
                   <Building2 className="h-4 w-4" />
                   Connect Bank Account
                 </Button>
-                <Button variant="outline" className="w-full" onClick={handleDemoData}>
-                  Use Demo Data (skip Plaid)
+                <Button variant="outline" className="w-full" onClick={handleDemoData} disabled={loading}>
+                  {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Loading demo data...</> : 'Use Demo Data (skip Plaid)'}
                 </Button>
               </div>
             ) : (

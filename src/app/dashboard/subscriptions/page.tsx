@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { SubscriptionCard } from '@/components/subscriptions/subscription-card';
+import { EmptyState } from '@/components/shared/empty-state';
 import { CreditCard } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -19,13 +20,14 @@ export default async function SubscriptionsPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: rawSubs } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rawSubs } = await (supabase as any)
     .from('subscriptions')
     .select('*, ai_analysis:ai_analyses(*)')
     .eq('user_id', user.id)
     .eq('is_active', true);
 
-  const subs: SubscriptionWithAnalysis[] = (rawSubs ?? []).map(s => ({
+  const subs: SubscriptionWithAnalysis[] = ((rawSubs ?? []) as any[]).map((s: any) => ({
     ...s,
     ai_analysis: Array.isArray(s.ai_analysis) ? s.ai_analysis[0] ?? null : s.ai_analysis,
   })) as unknown as SubscriptionWithAnalysis[];
@@ -37,21 +39,25 @@ export default async function SubscriptionsPage({
     cancel: subs.filter(s => s.ai_analysis?.recommendation === 'cancel').length,
   };
 
+  // Filter
   let filtered = filter === 'all'
     ? subs
     : subs.filter(s => s.ai_analysis?.recommendation === filter);
 
+  // Sort
   filtered = [...filtered].sort((a, b) => {
     if (sort === 'waste') return Number(b.ai_analysis?.waste_risk ?? 0) - Number(a.ai_analysis?.waste_risk ?? 0);
     if (sort === 'name') return a.merchant_name.localeCompare(b.merchant_name);
-    return Number(b.amount_avg) - Number(a.amount_avg);
+    return Number(b.amount_avg) - Number(a.amount_avg); // default: cost high-low
   });
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Subscriptions</h1>
-        <p className="text-muted-foreground text-sm mt-1">{subs.length} active</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Subscriptions</h1>
+          <p className="text-muted-foreground text-sm mt-1">{subs.length} active</p>
+        </div>
       </div>
 
       {subs.length === 0 ? (
@@ -69,6 +75,7 @@ export default async function SubscriptionsPage({
         </div>
       ) : (
         <>
+          {/* Filter tabs */}
           <div className="flex gap-1 bg-muted p-1 rounded-xl overflow-x-auto">
             {FILTERS.map(f => (
               <Link
@@ -89,6 +96,7 @@ export default async function SubscriptionsPage({
             ))}
           </div>
 
+          {/* Sort */}
           <div className="flex gap-2 items-center">
             <span className="text-xs text-muted-foreground">Sort:</span>
             {[
@@ -111,6 +119,7 @@ export default async function SubscriptionsPage({
             ))}
           </div>
 
+          {/* List */}
           <div className="space-y-2">
             {filtered.length === 0 ? (
               <p className="text-center text-muted-foreground text-sm py-8">

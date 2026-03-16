@@ -40,7 +40,8 @@ export async function PATCH(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
       .from('subscriptions')
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', id)

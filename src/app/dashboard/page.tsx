@@ -12,14 +12,17 @@ import type { SubscriptionWithAnalysis } from '@/types';
 async function getDashboardData(userId: string) {
   const supabase = await createClient();
 
-  const { data: subscriptions } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rawSubscriptions } = await (supabase as any)
     .from('subscriptions')
     .select('*, ai_analysis:ai_analyses(*)')
     .eq('user_id', userId)
     .eq('is_active', true)
     .order('amount_avg', { ascending: false });
 
-  const subs: SubscriptionWithAnalysis[] = (subscriptions ?? []).map(s => ({
+  const subscriptions = (rawSubscriptions ?? []) as any[];
+
+  const subs: SubscriptionWithAnalysis[] = subscriptions.map((s: any) => ({
     ...s,
     ai_analysis: Array.isArray(s.ai_analysis) ? s.ai_analysis[0] ?? null : s.ai_analysis,
   })) as unknown as SubscriptionWithAnalysis[];

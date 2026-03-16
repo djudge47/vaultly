@@ -17,7 +17,8 @@ export async function POST(request: Request) {
     // Skip Stripe in demo mode OR if no price ID — create billing record directly
     if (demoMode || !priceId || priceId.startsWith('price_REPLACE')) {
       const supabase = createAdminClient();
-      await supabase.from('billing_status').upsert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('billing_status').upsert({
         user_id: userId,
         stripe_customer_id: `dev_${userId.slice(0, 8)}`,
         stripe_subscription_id: null,
@@ -33,7 +34,8 @@ export async function POST(request: Request) {
 
     // Store customer ID immediately so billing status exists
     const supabase = createAdminClient();
-    await supabase.from('billing_status').upsert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('billing_status').upsert({
       user_id: userId,
       stripe_customer_id: customer.id,
       status: 'incomplete',

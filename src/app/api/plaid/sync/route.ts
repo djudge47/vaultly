@@ -13,11 +13,16 @@ export async function POST() {
     const adminSupabase = createAdminClient();
 
     // Get all Plaid items for this user
-    const { data: plaidItems } = await adminSupabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: plaidItems } = await (adminSupabase as any)
       .from('plaid_items')
       .select('*')
       .eq('user_id', user.id)
-      .eq('status', 'active');
+      .eq('status', 'active') as { data: Array<{
+        id: string;
+        plaid_access_token_encrypted: string;
+        cursor: string | null;
+      }> | null };
 
     if (!plaidItems?.length) {
       return NextResponse.json({ synced: 0, message: 'No Plaid items found' });
@@ -65,7 +70,8 @@ export async function POST() {
             is_recurring: false,
           }));
 
-          const { error } = await adminSupabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error } = await (adminSupabase as any)
             .from('transactions')
             .upsert(rows, { onConflict: 'plaid_transaction_id', ignoreDuplicates: true });
 
@@ -74,14 +80,16 @@ export async function POST() {
         }
 
         // Update cursor
-        await adminSupabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (adminSupabase as any)
           .from('plaid_items')
           .update({ cursor, last_synced_at: new Date().toISOString() })
           .eq('id', item.id);
 
       } catch (itemError) {
         console.error(`Error syncing item ${item.id}:`, itemError);
-        await adminSupabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (adminSupabase as any)
           .from('plaid_items')
           .update({ status: 'error', error_code: 'SYNC_FAILED' })
           .eq('id', item.id);

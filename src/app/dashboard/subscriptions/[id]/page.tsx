@@ -17,7 +17,8 @@ export default async function SubscriptionDetailPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: raw } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: raw } = await (supabase as any)
     .from('subscriptions')
     .select('*, ai_analysis:ai_analyses(*)')
     .eq('id', id)
@@ -27,8 +28,8 @@ export default async function SubscriptionDetailPage({
   if (!raw) notFound();
 
   const sub = {
-    ...raw,
-    ai_analysis: Array.isArray(raw.ai_analysis) ? raw.ai_analysis[0] ?? null : raw.ai_analysis,
+    ...(raw as any),
+    ai_analysis: Array.isArray((raw as any).ai_analysis) ? (raw as any).ai_analysis[0] ?? null : (raw as any).ai_analysis,
   } as unknown as SubscriptionWithAnalysis;
 
   const analysis = sub.ai_analysis;
