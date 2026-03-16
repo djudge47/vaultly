@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import { exchangePublicToken, getInstitution } from '@/lib/plaid';
+import { exchangePublicToken, getItem, getInstitution } from '@/lib/plaid';
 import { encrypt } from '@/lib/encryption';
 
 export async function POST(request: Request) {
@@ -11,10 +11,15 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { public_token, institution_id, institution_name } = await request.json();
+
+    // Exchange public token for access token
     const exchangeData = await exchangePublicToken(public_token);
     const { access_token, item_id } = exchangeData;
+
+    // Encrypt the access token before storing
     const encryptedToken = encrypt(access_token);
 
+    // Get institution details
     let instName = institution_name;
     if (institution_id && !instName) {
       try {
@@ -23,6 +28,7 @@ export async function POST(request: Request) {
       } catch { /* ignore */ }
     }
 
+    // Store in DB
     const adminSupabase = createAdminClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: plaidItem, error } = await (adminSupabase as any)
@@ -39,6 +45,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error) throw error;
+
     return NextResponse.json({ success: true, item_id: plaidItem.id, institution_name: instName });
   } catch (error) {
     console.error('Exchange token error:', error);
