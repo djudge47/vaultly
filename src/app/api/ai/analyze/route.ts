@@ -12,63 +12,62 @@ export async function POST() {
 
     const adminSupabase = createAdminClient();
 
-    // Get all active subscriptions without analysis
-    const { data: rawSubs } = await adminSupabase
+    const { data: subscriptions } = await adminSupabase
       .from('subscriptions')
-      .select('*, ai_analysis:ai_analyses(*)')
+      .select('*')
       .eq('user_id', user.id)
-      .eq('is_active', true);
+      .eq('status', 'active');
 
-    const subscriptions = (rawSubs ?? []) as Array<{
-      id: string;
-      merchant_name: string;
-      category: string | null;
-      amount_avg: number;
-      amount_last: number | null;
-      billing_cycle: string;
-      first_seen_date: string | null;
-      ai_analysis: Array<{ id: string }> | null;
-      [key: string]: unknown;
-    }>;
+    if (!subscriptions?.length) return NextResponse.json({ analyzed: 0 });
 
-    if (!subscriptions?.length) {
-      return NextResponse.json({ analyzed: 0 });
-    }
-
-    // Build user context
-    const totalMonthlySpend = subscriptions.reduce((s, sub) => s + Number(sub.amount_avg), 0);
+    const totalMonthlySpend = subscriptions.reduce((s, sub) => s + Number(sub.amount), 0);
     const subscriptionCount = subscriptions.length;
-
     let analyzed = 0;
 
     for (const sub of subscriptions) {
-      // Skip if already analyzed
-      if (sub.ai_analysis && Array.isArray(sub.ai_analysis) ? sub.ai_analysis.length > 0 : sub.ai_analysis) continue;
+      // Skip if already analyzed recently
+      if (sub.last_analyzed_at) continue;
 
-      // Find other subs in same category
       const sameCategorySubs = subscriptions
         .filter(s => s.id !== sub.id && s.category === sub.category)
-        .map(s => s.merchant_name);
+        .map(s => s.name);
 
       const context = { totalMonthlySpend, subscriptionCount, sameCategorySubs };
 
-      const result = await analyzeSubscription(sub as unknown as Subscription, context);
+      // Map to Subscription type for AI
+      const subForAI = {
+        ...sub,
+        merchant_name: sub.name,
+        amount_avg: sub.amount,
+        amount_last: sub.amount,
+        billing_cycle: sub.billing_interval,
+        first_seen_date: sub.detected_at,
+      } as unknown as Subscription;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (adminSupabase as any).from('ai_analyses').upsert({
+      const result = await analyzeSubscription(subForAI, context);
+
+      await adminSupabase.from('ai_analyses').upsert({
         user_id: user.id,
         subscription_id: sub.id,
-        value_score: result.value_score ?? null,
-        waste_risk: result.waste_risk ?? null,
-        recommendation: result.recommendation ?? null,
-        reasoning: result.reasoning ?? null,
-        potential_annual_savings: result.potential_annual_savings ?? null,
-        model_version: 'claude-sonnet-4-20250514',
-      });
+        value_score: result.value_score ?? 50,
+        waste_risk: result.waste_risk ?? 50,
+        recommendation: result.recommendation ?? 'keep',
+        reasoning: result.reasoning ?? '',
+        annual_savings_potential: result.potential_annual_savings ?? 0,
+        model_used: 'claude-sonnet-4-20250514',
+      }, { onConflict: 'subscription_id' });
+
+      // Update subscription with scores
+      await adminSupabase.from('subscriptions').update({
+        value_score: result.value_score ?? 50,
+        waste_risk: result.waste_risk ?? 50,
+        recommendation: result.recommendation as 'keep' | 'cancel' | 'downgrade' | 'review' ?? 'keep',
+        annual_savings_potential: result.potential_annual_savings ?? 0,
+        ai_reasoning: result.reasoning ?? '',
+        last_analyzed_at: new Date().toISOString(),
+      }).eq('id', sub.id);
 
       analyzed++;
-
-      // Small delay to avoid rate limits
       await new Promise(r => setTimeout(r, 200));
     }
 

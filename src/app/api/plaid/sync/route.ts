@@ -12,17 +12,11 @@ export async function POST() {
 
     const adminSupabase = createAdminClient();
 
-    // Get all Plaid items for this user
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: plaidItems } = await (adminSupabase as any)
+    const { data: plaidItems } = await adminSupabase
       .from('plaid_items')
       .select('*')
       .eq('user_id', user.id)
-      .eq('status', 'active') as { data: Array<{
-        id: string;
-        plaid_access_token_encrypted: string;
-        cursor: string | null;
-      }> | null };
+      .eq('status', 'active');
 
     if (!plaidItems?.length) {
       return NextResponse.json({ synced: 0, message: 'No Plaid items found' });
@@ -32,46 +26,43 @@ export async function POST() {
 
     for (const item of plaidItems) {
       try {
-        const accessToken = decrypt(item.plaid_access_token_encrypted);
+        const accessToken = decrypt(item.access_token_encrypted);
         let cursor = item.cursor ?? undefined;
         let hasMore = true;
         const allAdded: unknown[] = [];
 
-        // Paginate through all transactions
         while (hasMore) {
           const syncData = await syncTransactions(accessToken, cursor);
           allAdded.push(...syncData.added);
-          // Handle modified/removed in a real app
           cursor = syncData.next_cursor;
           hasMore = syncData.has_more;
         }
 
-        // Insert transactions
         if (allAdded.length > 0) {
           const rows = (allAdded as Array<{
             transaction_id: string;
             merchant_name?: string;
             name?: string;
-            merchant_entity_id?: string;
             amount: number;
             iso_currency_code?: string;
             date: string;
             category?: string[];
+            pending?: boolean;
           }>).map(tx => ({
             user_id: user.id,
             plaid_item_id: item.id,
             plaid_transaction_id: tx.transaction_id,
-            merchant_name: tx.merchant_name ?? tx.name ?? null,
-            merchant_id: tx.merchant_entity_id ?? null,
+            merchant_name: tx.merchant_name ?? null,
+            name: tx.name ?? tx.merchant_name ?? 'Unknown',
             amount: tx.amount,
             currency: tx.iso_currency_code ?? 'USD',
             date: tx.date,
             category: tx.category ?? null,
+            pending: tx.pending ?? false,
             is_recurring: false,
           }));
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (adminSupabase as any)
+          const { error } = await adminSupabase
             .from('transactions')
             .upsert(rows, { onConflict: 'plaid_transaction_id', ignoreDuplicates: true });
 
@@ -79,17 +70,14 @@ export async function POST() {
           totalSynced += rows.length;
         }
 
-        // Update cursor
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (adminSupabase as any)
+        await adminSupabase
           .from('plaid_items')
           .update({ cursor, last_synced_at: new Date().toISOString() })
           .eq('id', item.id);
 
       } catch (itemError) {
         console.error(`Error syncing item ${item.id}:`, itemError);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (adminSupabase as any)
+        await adminSupabase
           .from('plaid_items')
           .update({ status: 'error', error_code: 'SYNC_FAILED' })
           .eq('id', item.id);

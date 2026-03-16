@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createStripeCustomer, createCheckoutSession } from '@/lib/stripe';
 import { createAdminClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
     const { userId, email, name } = await request.json();
-
     if (!userId || !email) {
       return NextResponse.json({ error: 'Missing userId or email' }, { status: 400 });
     }
@@ -14,34 +12,32 @@ export async function POST(request: Request) {
     const priceId = process.env.STRIPE_PRICE_ID;
     const demoMode = process.env.DEMO_MODE === 'true';
 
-    // Skip Stripe in demo mode OR if no price ID — create billing record directly
-    if (demoMode || !priceId || priceId.startsWith('price_REPLACE')) {
+    // Demo mode or no price ID — skip Stripe, create trial directly
+    if (demoMode || !priceId || priceId.includes('REPLACE')) {
       const supabase = createAdminClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('billing_status').upsert({
-        user_id: userId,
-        stripe_customer_id: `dev_${userId.slice(0, 8)}`,
-        stripe_subscription_id: null,
-        status: 'trialing',
-        trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        current_period_end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      });
+      const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      await supabase
+        .from('profiles')
+        .update({
+          stripe_customer_id: `demo_${userId.slice(0, 8)}`,
+          subscription_status: 'trialing',
+          trial_ends_at: trialEnd,
+          current_period_end: trialEnd,
+        })
+        .eq('id', userId);
       return NextResponse.json({ url: `${appUrl}/onboarding` });
     }
 
-    // Create Stripe customer
+    // Real Stripe checkout
+    const { createStripeCustomer, createCheckoutSession } = await import('@/lib/stripe');
     const customer = await createStripeCustomer(email, name);
 
-    // Store customer ID immediately so billing status exists
     const supabase = createAdminClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('billing_status').upsert({
-      user_id: userId,
-      stripe_customer_id: customer.id,
-      status: 'incomplete',
-    });
+    await supabase
+      .from('profiles')
+      .update({ stripe_customer_id: customer.id })
+      .eq('id', userId);
 
-    // Create checkout session
     const session = await createCheckoutSession({
       customerId: customer.id,
       priceId,
@@ -53,6 +49,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ url: session.url });
   } catch (error) {
     console.error('Create checkout error:', error);
-    return NextResponse.json({ error: 'Failed to create checkout session' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create checkout' }, { status: 500 });
   }
 }

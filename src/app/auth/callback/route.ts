@@ -11,23 +11,19 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.user) {
-      // Check if billing record already exists (returning user)
-      const { data: billing } = await supabase
-        .from('billing_status')
-        .select('id')
-        .eq('user_id', data.user.id)
+      // Check if user has billing set up
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_status, stripe_customer_id')
+        .eq('id', data.user.id)
         .single();
 
-      if (!billing) {
+      if (!profile?.stripe_customer_id) {
         // New user — create Stripe checkout
         const res = await fetch(`${origin}/api/stripe/create-checkout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: data.user.id,
-            email: data.user.email,
-            name: data.user.user_metadata?.full_name,
-          }),
+          body: JSON.stringify({ userId: data.user.id, email: data.user.email, name: data.user.user_metadata?.full_name }),
         });
         const { url } = await res.json();
         if (url) return NextResponse.redirect(url);

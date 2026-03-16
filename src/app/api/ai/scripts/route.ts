@@ -15,41 +15,43 @@ export async function POST(request: Request) {
 
     const adminSupabase = createAdminClient();
 
-    // Get subscription + existing analysis
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: rawSub } = await (adminSupabase as any)
+    const { data: sub } = await adminSupabase
       .from('subscriptions')
-      .select('*, ai_analysis:ai_analyses(*)')
+      .select('*')
       .eq('id', subscriptionId)
       .eq('user_id', user.id)
       .single();
 
-    const sub = rawSub as (Subscription & { ai_analysis: AiAnalysis[] | null }) | null;
-
     if (!sub) return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
 
-    const analysis = Array.isArray(sub.ai_analysis) ? sub.ai_analysis[0] : sub.ai_analysis;
-
-    const scripts = await generateScripts(
-      sub as unknown as Subscription,
-      (analysis ?? {}) as Partial<AiAnalysis>
-    );
-
-    // Update the analysis record with scripts
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (adminSupabase as any)
+    const { data: analysis } = await adminSupabase
       .from('ai_analyses')
-      .update({
-        cancellation_email: scripts.cancellation_email ?? null,
-        negotiation_email: scripts.negotiation_email ?? null,
-        phone_script: scripts.phone_script ?? null,
-        chat_script: scripts.chat_script ?? null,
-      })
-      .eq('subscription_id', subscriptionId);
+      .select('*')
+      .eq('subscription_id', subscriptionId)
+      .single();
 
-    // Log the script generation
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (adminSupabase as any).from('audit_logs').insert({
+    const subForAI = {
+      ...sub,
+      merchant_name: sub.name,
+      amount_avg: sub.amount,
+      billing_cycle: sub.billing_interval,
+    } as unknown as Subscription;
+
+    const analysisForAI = analysis ? {
+      recommendation: analysis.recommendation,
+      reasoning: analysis.reasoning,
+    } as Partial<AiAnalysis> : {};
+
+    const scripts = await generateScripts(subForAI, analysisForAI);
+
+    await adminSupabase.from('ai_analyses').update({
+      cancellation_email: scripts.cancellation_email ?? null,
+      negotiation_email: scripts.negotiation_email ?? null,
+      phone_script: scripts.phone_script ?? null,
+      chat_script: scripts.chat_script ?? null,
+    }).eq('subscription_id', subscriptionId);
+
+    await adminSupabase.from('audit_logs').insert({
       user_id: user.id,
       action: 'generate_scripts',
       resource_type: 'subscription',

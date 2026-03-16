@@ -3,34 +3,25 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/server';
 
 const DEMO_SUBSCRIPTIONS = [
-  { merchant_name: 'Netflix', normalized_merchant: 'netflix', category: 'streaming', amount_avg: 22.99, amount_last: 22.99, billing_cycle: 'monthly', days_until_next: 12, days_since_last: 18, days_since_first: 730 },
-  { merchant_name: 'Spotify Premium', normalized_merchant: 'spotify', category: 'streaming', amount_avg: 10.99, amount_last: 10.99, billing_cycle: 'monthly', days_until_next: 5, days_since_last: 25, days_since_first: 540 },
-  { merchant_name: 'Apple Music', normalized_merchant: 'apple_music', category: 'streaming', amount_avg: 10.99, amount_last: 10.99, billing_cycle: 'monthly', days_until_next: 8, days_since_last: 22, days_since_first: 180 },
-  { merchant_name: 'Disney+', normalized_merchant: 'disney_plus', category: 'streaming', amount_avg: 13.99, amount_last: 13.99, billing_cycle: 'monthly', days_until_next: 15, days_since_last: 15, days_since_first: 365 },
-  { merchant_name: 'HBO Max', normalized_merchant: 'hbo_max', category: 'streaming', amount_avg: 15.99, amount_last: 15.99, billing_cycle: 'monthly', days_until_next: 3, days_since_last: 27, days_since_first: 200 },
-  { merchant_name: 'Adobe Creative Cloud', normalized_merchant: 'adobe_cc', category: 'saas', amount_avg: 54.99, amount_last: 54.99, billing_cycle: 'monthly', days_until_next: 20, days_since_last: 10, days_since_first: 900 },
-  { merchant_name: 'Notion', normalized_merchant: 'notion', category: 'saas', amount_avg: 10.00, amount_last: 10.00, billing_cycle: 'monthly', days_until_next: 7, days_since_last: 23, days_since_first: 365 },
-  { merchant_name: 'ChatGPT Plus', normalized_merchant: 'openai', category: 'ai', amount_avg: 20.00, amount_last: 20.00, billing_cycle: 'monthly', days_until_next: 11, days_since_last: 19, days_since_first: 300 },
-  { merchant_name: 'Peloton App', normalized_merchant: 'peloton', category: 'fitness', amount_avg: 12.99, amount_last: 12.99, billing_cycle: 'monthly', days_until_next: 2, days_since_last: 28, days_since_first: 450 },
-  { merchant_name: 'Planet Fitness', normalized_merchant: 'planet_fitness', category: 'fitness', amount_avg: 24.99, amount_last: 24.99, billing_cycle: 'monthly', days_until_next: 1, days_since_last: 29, days_since_first: 600 },
-  { merchant_name: 'HelloFresh', normalized_merchant: 'hellofresh', category: 'food', amount_avg: 59.94, amount_last: 59.94, billing_cycle: 'weekly', days_until_next: 2, days_since_last: 5, days_since_first: 120 },
-  { merchant_name: 'Dropbox Plus', normalized_merchant: 'dropbox', category: 'saas', amount_avg: 11.99, amount_last: 11.99, billing_cycle: 'monthly', days_until_next: 18, days_since_last: 12, days_since_first: 1095 },
-  { merchant_name: 'iCloud+ 200GB', normalized_merchant: 'icloud', category: 'saas', amount_avg: 2.99, amount_last: 2.99, billing_cycle: 'monthly', days_until_next: 9, days_since_last: 21, days_since_first: 730 },
-  { merchant_name: 'NordVPN', normalized_merchant: 'nordvpn', category: 'security', amount_avg: 12.99, amount_last: 12.99, billing_cycle: 'monthly', days_until_next: 14, days_since_last: 16, days_since_first: 60 },
-  { merchant_name: 'The New York Times', normalized_merchant: 'nytimes', category: 'news', amount_avg: 17.00, amount_last: 17.00, billing_cycle: 'monthly', days_until_next: 22, days_since_last: 8, days_since_first: 400 },
+  { name: 'Netflix', merchant_name: 'Netflix', category: 'streaming', amount: 22.99, billing_interval: 'monthly' as const, days_until: 12, days_since: 18, days_old: 730 },
+  { name: 'Spotify Premium', merchant_name: 'Spotify', category: 'streaming', amount: 10.99, billing_interval: 'monthly' as const, days_until: 5, days_since: 25, days_old: 540 },
+  { name: 'Apple Music', merchant_name: 'Apple Music', category: 'streaming', amount: 10.99, billing_interval: 'monthly' as const, days_until: 8, days_since: 22, days_old: 180 },
+  { name: 'Disney+', merchant_name: 'Disney+', category: 'streaming', amount: 13.99, billing_interval: 'monthly' as const, days_until: 15, days_since: 15, days_old: 365 },
+  { name: 'HBO Max', merchant_name: 'HBO Max', category: 'streaming', amount: 15.99, billing_interval: 'monthly' as const, days_until: 3, days_since: 27, days_old: 200 },
+  { name: 'Adobe Creative Cloud', merchant_name: 'Adobe', category: 'saas', amount: 54.99, billing_interval: 'monthly' as const, days_until: 20, days_since: 10, days_old: 900 },
+  { name: 'Notion', merchant_name: 'Notion', category: 'saas', amount: 10.00, billing_interval: 'monthly' as const, days_until: 7, days_since: 23, days_old: 365 },
+  { name: 'ChatGPT Plus', merchant_name: 'OpenAI', category: 'ai', amount: 20.00, billing_interval: 'monthly' as const, days_until: 11, days_since: 19, days_old: 300 },
+  { name: 'Peloton App', merchant_name: 'Peloton', category: 'fitness', amount: 12.99, billing_interval: 'monthly' as const, days_until: 2, days_since: 28, days_old: 450 },
+  { name: 'Planet Fitness', merchant_name: 'Planet Fitness', category: 'fitness', amount: 24.99, billing_interval: 'monthly' as const, days_until: 1, days_since: 29, days_old: 600 },
+  { name: 'HelloFresh', merchant_name: 'HelloFresh', category: 'food', amount: 59.94, billing_interval: 'weekly' as const, days_until: 2, days_since: 5, days_old: 120 },
+  { name: 'Dropbox Plus', merchant_name: 'Dropbox', category: 'saas', amount: 11.99, billing_interval: 'monthly' as const, days_until: 18, days_since: 12, days_old: 1095 },
+  { name: 'iCloud+ 200GB', merchant_name: 'Apple', category: 'saas', amount: 2.99, billing_interval: 'monthly' as const, days_until: 9, days_since: 21, days_old: 730 },
+  { name: 'NordVPN', merchant_name: 'NordVPN', category: 'security', amount: 12.99, billing_interval: 'monthly' as const, days_until: 14, days_since: 16, days_old: 60 },
+  { name: 'The New York Times', merchant_name: 'NYT', category: 'news', amount: 17.00, billing_interval: 'monthly' as const, days_until: 22, days_since: 8, days_old: 400 },
 ];
 
-function addDays(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
-}
-
-function subtractDays(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().split('T')[0];
-}
+function addDays(n: number) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
+function subDays(n: number) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0]; }
 
 export async function POST() {
   try {
@@ -40,44 +31,37 @@ export async function POST() {
 
     const adminSupabase = createAdminClient();
 
-    // Delete existing demo subscriptions for this user first
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (adminSupabase as any)
-      .from('subscriptions')
-      .delete()
-      .eq('user_id', user.id)
-      .eq('source', 'demo');
+    // Delete existing demo subscriptions
+    await adminSupabase.from('subscriptions').delete().eq('user_id', user.id);
 
-    // Insert demo subscriptions
     const rows = DEMO_SUBSCRIPTIONS.map(sub => ({
       user_id: user.id,
+      name: sub.name,
       merchant_name: sub.merchant_name,
-      normalized_merchant: sub.normalized_merchant,
       category: sub.category,
-      amount_avg: sub.amount_avg,
-      amount_last: sub.amount_last,
-      billing_cycle: sub.billing_cycle,
-      next_billing_date: addDays(sub.days_until_next),
-      last_billing_date: subtractDays(sub.days_since_last),
-      first_seen_date: subtractDays(sub.days_since_first),
-      is_active: true,
-      source: 'demo',
-      detection_confidence: 0.95,
+      amount: sub.amount,
+      billing_interval: sub.billing_interval,
+      next_billing_date: addDays(sub.days_until),
+      last_billing_date: subDays(sub.days_since),
+      status: 'active' as const,
+      confidence: 0.95,
     }));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (adminSupabase as any)
-      .from('subscriptions')
-      .insert(rows);
+    const { error } = await adminSupabase.from('subscriptions').insert(rows);
+    if (error) throw error;
 
-    if (error) {
-      console.error('Demo data insert error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    // Ensure trial billing status
+    const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    await adminSupabase.from('profiles').update({
+      subscription_status: 'trialing',
+      trial_ends_at: trialEnd,
+      current_period_end: trialEnd,
+      bank_connected: true,
+    }).eq('id', user.id);
 
     return NextResponse.json({ inserted: rows.length });
   } catch (error) {
     console.error('Demo data error:', error);
-    return NextResponse.json({ error: 'Failed to load demo data' }, { status: 500 });
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
